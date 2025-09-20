@@ -5,7 +5,10 @@ const DEFAULT_SETTINGS = {
     syncInterval: 10, // seconds
     enabled: true,
     showNotices: true,
-    lastSyncTimes: {} // track last modified times
+    enableServerPolling: true,
+    serverPollInterval: 30, // seconds
+    lastSyncTimes: {}, // track last modified times
+    serverFileHashes: {} // track server file versions
 };
 
 class AutoServerSyncPlugin extends Plugin {
@@ -13,8 +16,11 @@ class AutoServerSyncPlugin extends Plugin {
         super(app, manifest);
         this.settings = DEFAULT_SETTINGS;
         this.syncTimer = null;
+        this.serverPollTimer = null;
         this.fileModificationTimes = new Map();
         this.pendingSync = false;
+        this.pendingDownload = false;
+        this.locallyModifiedFiles = new Set();
     }
 
     async onload() {
@@ -65,8 +71,9 @@ class AutoServerSyncPlugin extends Plugin {
             this.app.vault.on('modify', (file) => {
                 if (file.extension === 'md') {
                     this.fileModificationTimes.set(file.path, Date.now());
+                    this.locallyModifiedFiles.add(file.path);
                     if (this.settings.showNotices) {
-                        console.log(`File modified: ${file.name}`);
+                        console.log(`File modified locally: ${file.name}`);
                     }
                 }
             })
@@ -77,8 +84,9 @@ class AutoServerSyncPlugin extends Plugin {
             this.app.vault.on('create', (file) => {
                 if (file.extension === 'md') {
                     this.fileModificationTimes.set(file.path, Date.now());
+                    this.locallyModifiedFiles.add(file.path);
                     if (this.settings.showNotices) {
-                        console.log(`File created: ${file.name}`);
+                        console.log(`File created locally: ${file.name}`);
                     }
                 }
             })
@@ -96,19 +104,34 @@ class AutoServerSyncPlugin extends Plugin {
         if (this.syncTimer) {
             clearInterval(this.syncTimer);
         }
+        if (this.serverPollTimer) {
+            clearInterval(this.serverPollTimer);
+        }
         
+        // Start local file change monitoring
         this.syncTimer = setInterval(() => {
             this.checkAndSync();
         }, this.settings.syncInterval * 1000);
         
+        // Start server polling if enabled
+        if (this.settings.enableServerPolling) {
+            this.serverPollTimer = setInterval(() => {
+                this.checkServerChanges();
+            }, this.settings.serverPollInterval * 1000);
+        }
+        
         this.updateStatusBar('Running');
-        console.log(`Auto sync started (interval: ${this.settings.syncInterval}s)`);
+        console.log(`Auto sync started (local: ${this.settings.syncInterval}s, server: ${this.settings.serverPollInterval}s)`);
     }
 
     stopSync() {
         if (this.syncTimer) {
             clearInterval(this.syncTimer);
             this.syncTimer = null;
+        }
+        if (this.serverPollTimer) {
+            clearInterval(this.serverPollTimer);
+            this.serverPollTimer = null;
         }
         this.updateStatusBar('Stopped');
         console.log('Auto sync stopped');
@@ -172,10 +195,10 @@ class AutoServerSyncPlugin extends Plugin {
         
         try {
             // Create a marker file to trigger sync
-            const markerPath = '/tmp/obsidian-sync-trigger';
+            const markerPath = '.obsidian-sync-trigger';
             const markerContent = JSON.stringify({
                 timestamp: Date.now(),
-                vault: this.app.vault.adapter.basePath || '/home/egarrr/Notes/Myself',
+                vault: this.app.vault.adapter.basePath || '/home/egarrr/Md essays/',
                 trigger: 'obsidian-plugin'
             });
             
@@ -202,6 +225,101 @@ class AutoServerSyncPlugin extends Plugin {
             
             if (this.settings.showNotices) {
                 new Notice(`Sync trigger failed: ${error.message}`);
+            }
+        }
+    }
+
+    async checkServerChanges() {
+        if (!this.settings.enableServerPolling || this.pendingDownload) {
+            return;
+        }
+        
+        try {
+            // Get list of files from server API
+            const response = await fetch(`${this.settings.serverUrl}/api/files`);
+            if (!response.ok) {
+                console.log('Server polling failed - server may be unreachable');
+                return;
+            }
+            
+            const serverFiles = await response.json();
+            let changedFiles = [];
+            
+            for (const serverFile of serverFiles) {
+                const relativePath = serverFile.path;
+                
+                // Skip files that were recently modified locally
+                if (this.locallyModifiedFiles.has(relativePath)) {
+                    // Remove from locally modified after some time
+                    setTimeout(() => {
+                        this.locallyModifiedFiles.delete(relativePath);
+                    }, 60000); // 1 minute grace period
+                    continue;
+                }
+                
+                // Check if file exists locally and get its content hash
+                try {
+                    const localFile = this.app.vault.getAbstractFileByPath(relativePath);
+                    if (!localFile || localFile.stat.mtime < serverFile.lastModified) {
+                        changedFiles.push(serverFile);
+                    }
+                } catch (error) {
+                    // File doesn't exist locally, add to download list
+                    changedFiles.push(serverFile);
+                }
+            }
+            
+            if (changedFiles.length > 0) {
+                this.updateStatusBar(`${changedFiles.length} server changes`);
+                await this.triggerDownloadSync(changedFiles);
+                
+                if (this.settings.showNotices) {
+                    new Notice(`Downloaded ${changedFiles.length} updated file(s) from server`);
+                }
+                
+                console.log(`Downloaded ${changedFiles.length} files from server`);
+            }
+            
+        } catch (error) {
+            console.error('Server polling error:', error);
+        }
+    }
+    
+    async triggerDownloadSync(changedFiles) {
+        if (this.pendingDownload) {
+            return;
+        }
+        
+        this.pendingDownload = true;
+        this.updateStatusBar('Downloading...');
+        
+        try {
+            // Create a download marker file
+            const markerPath = '.obsidian-download-trigger';
+            const markerContent = JSON.stringify({
+                timestamp: Date.now(),
+                vault: this.app.vault.adapter.basePath || '/home/egarrr/Md essays/',
+                trigger: 'server-changes',
+                changedFiles: changedFiles.map(f => f.path)
+            });
+            
+            await this.app.vault.adapter.write(markerPath, markerContent);
+            
+            console.log('Download sync triggered for server changes');
+            
+            // Reset status after a delay
+            setTimeout(() => {
+                this.updateStatusBar('Running');
+                this.pendingDownload = false;
+            }, 5000);
+            
+        } catch (error) {
+            console.error('Error triggering download sync:', error);
+            this.updateStatusBar('Error');
+            this.pendingDownload = false;
+            
+            if (this.settings.showNotices) {
+                new Notice(`Download trigger failed: ${error.message}`);
             }
         }
     }
@@ -294,6 +412,43 @@ class AutoServerSyncSettingTab extends PluginSettingTab {
                 .onChange(async (value) => {
                     this.plugin.settings.showNotices = value;
                     await this.plugin.saveSettings();
+                }));
+                
+        // Server polling section
+        containerEl.createEl('h3', { text: 'Server Change Detection' });
+        
+        new Setting(containerEl)
+            .setName('Enable server polling')
+            .setDesc('Automatically check for changes made on other devices')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.enableServerPolling)
+                .onChange(async (value) => {
+                    this.plugin.settings.enableServerPolling = value;
+                    await this.plugin.saveSettings();
+                    
+                    // Restart sync to apply changes
+                    if (this.plugin.settings.enabled) {
+                        this.plugin.startSync();
+                    }
+                }));
+        
+        new Setting(containerEl)
+            .setName('Server poll interval')
+            .setDesc('How often to check server for changes (seconds)')
+            .addText(text => text
+                .setPlaceholder('30')
+                .setValue(this.plugin.settings.serverPollInterval.toString())
+                .onChange(async (value) => {
+                    const interval = parseInt(value);
+                    if (interval > 0 && interval >= 15) {
+                        this.plugin.settings.serverPollInterval = interval;
+                        await this.plugin.saveSettings();
+                        
+                        // Restart sync with new interval
+                        if (this.plugin.settings.enabled) {
+                            this.plugin.startSync();
+                        }
+                    }
                 }));
 
         // Sync status and controls

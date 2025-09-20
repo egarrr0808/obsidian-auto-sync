@@ -1,26 +1,76 @@
 #!/bin/bash
 
-# Obsidian Sync Script Template
-# This script syncs your local Notes directory to the remote Obsidian server
-# Configure the variables below for your setup
+# Obsidian Auto-Sync Script for Plugin Integration
+# This script syncs your local Obsidian vault to the remote server
+# Configured for your setup
 
 # ===========================================
-# CONFIGURATION - EDIT THESE VALUES
+# CONFIGURATION
 # ===========================================
 
-LOCAL_VAULT="$HOME/path/to/your/obsidian/vault"
-REMOTE_HOST="your-ssh-host-alias"
-REMOTE_VAULT="/path/to/remote/vault/directory"
-LOG_FILE="$HOME/obsidian-sync.log"
-TRIGGER_FILE="/tmp/obsidian-sync-trigger"
+LOCAL_VAULT="/home/egarrr/Md essays/"
+REMOTE_HOST="ubuntu@207.127.93.169"
+REMOTE_VAULT="/home/ubuntu/obsidian-vault/"
+LOG_FILE="/home/egarrr/obsidian-sync.log"
+TRIGGER_FILE="/home/egarrr/Md essays/.obsidian-sync-trigger"
+DOWNLOAD_TRIGGER_FILE="/home/egarrr/Md essays/.obsidian-download-trigger"
+SSH_KEY="/home/egarrr/.ssh/obsidian_server_key"
 
 # ===========================================
-# SCRIPT LOGIC - DO NOT EDIT BELOW
+# SCRIPT LOGIC
 # ===========================================
 
 # Function to log messages with timestamp
 log_message() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOG_FILE"
+}
+
+# Function to perform download-only sync (for server changes)
+do_download_sync() {
+    local trigger_source="$1"
+    
+    log_message "Starting download-only sync (triggered by: $trigger_source)..."
+    
+    # Check if local vault exists
+    if [ ! -d "$LOCAL_VAULT" ]; then
+        log_message "ERROR: Local vault directory does not exist: $LOCAL_VAULT"
+        return 1
+    fi
+
+    # Download server changes to local (no upload)
+    log_message "Downloading server changes to local..."
+    rsync -avz \
+        --exclude='.obsidian/' \
+        --exclude='.git/' \
+        --exclude='.DS_Store' \
+        --exclude='*.tmp' \
+        --exclude='Thumbs.db' \
+        -e "ssh -i $SSH_KEY" \
+        "$REMOTE_HOST:$REMOTE_VAULT" "$LOCAL_VAULT" \
+        2>&1 | while read line; do
+            log_message "DOWNLOAD: $line"
+        done
+
+    DOWNLOAD_RESULT=${PIPESTATUS[0]}
+
+    if [ $DOWNLOAD_RESULT -eq 0 ]; then
+        log_message "Download-only sync completed successfully"
+        
+        # Count files synced
+        FILE_COUNT=$(find "$LOCAL_VAULT" -name "*.md" | wc -l)
+        log_message "Total markdown files in local vault: $FILE_COUNT"
+        
+        # Remove download trigger file if it exists
+        if [ -f "$DOWNLOAD_TRIGGER_FILE" ]; then
+            rm -f "$DOWNLOAD_TRIGGER_FILE" 2>/dev/null
+            log_message "Download trigger file removed"
+        fi
+        
+        return 0
+    else
+        log_message "ERROR: Download sync failed with exit code $DOWNLOAD_RESULT"
+        return $DOWNLOAD_RESULT
+    fi
 }
 
 # Function to perform the sync
@@ -35,27 +85,41 @@ do_sync() {
         return 1
     fi
 
-    # Sync files using rsync
-    # -a: archive mode (preserves permissions, timestamps, etc.)
-    # -v: verbose output
-    # -z: compress during transfer
-    # --delete: delete files on remote that don't exist locally
-    # --exclude: exclude certain files/directories
+    # Sync files using rsync (bidirectional)
+    # First, upload local changes to server
+    log_message "Uploading local changes to server..."
     rsync -avz --delete \
         --exclude='.obsidian/' \
         --exclude='.git/' \
         --exclude='.DS_Store' \
         --exclude='*.tmp' \
         --exclude='Thumbs.db' \
+        -e "ssh -i $SSH_KEY" \
         "$LOCAL_VAULT" "$REMOTE_HOST:$REMOTE_VAULT" \
         2>&1 | while read line; do
-            log_message "$line"
+            log_message "UPLOAD: $line"
         done
 
-    SYNC_RESULT=${PIPESTATUS[0]}
+    UPLOAD_RESULT=${PIPESTATUS[0]}
 
-    if [ $SYNC_RESULT -eq 0 ]; then
-        log_message "Sync completed successfully"
+    # Then, download any server changes to local
+    log_message "Downloading server changes to local..."
+    rsync -avz \
+        --exclude='.obsidian/' \
+        --exclude='.git/' \
+        --exclude='.DS_Store' \
+        --exclude='*.tmp' \
+        --exclude='Thumbs.db' \
+        -e "ssh -i $SSH_KEY" \
+        "$REMOTE_HOST:$REMOTE_VAULT" "$LOCAL_VAULT" \
+        2>&1 | while read line; do
+            log_message "DOWNLOAD: $line"
+        done
+
+    DOWNLOAD_RESULT=${PIPESTATUS[0]}
+
+    if [ $UPLOAD_RESULT -eq 0 ] && [ $DOWNLOAD_RESULT -eq 0 ]; then
+        log_message "Bi-directional sync completed successfully"
         
         # Count files synced
         FILE_COUNT=$(find "$LOCAL_VAULT" -name "*.md" | wc -l)
@@ -69,27 +133,45 @@ do_sync() {
         
         return 0
     else
-        log_message "ERROR: Sync failed with exit code $SYNC_RESULT"
-        return $SYNC_RESULT
+        log_message "ERROR: Sync failed - Upload: $UPLOAD_RESULT, Download: $DOWNLOAD_RESULT"
+        return 1
     fi
 }
 
-# Function to watch for trigger file
+# Function to watch for trigger files
 watch_for_trigger() {
-    log_message "Starting trigger file watcher..."
+    log_message "Starting trigger file watcher (upload and download)..."
     
     while true; do
+        # Check for upload trigger (local changes)
         if [ -f "$TRIGGER_FILE" ]; then
             # Read trigger info if possible
             if [ -r "$TRIGGER_FILE" ]; then
                 TRIGGER_INFO=$(cat "$TRIGGER_FILE" 2>/dev/null || echo "unknown")
-                log_message "Trigger file detected: $TRIGGER_INFO"
+                log_message "Upload trigger file detected: $TRIGGER_INFO"
             else
-                log_message "Trigger file detected"
+                log_message "Upload trigger file detected"
             fi
             
-            # Perform sync
+            # Perform bi-directional sync
             do_sync "plugin-trigger"
+            
+            # Small delay to prevent rapid retriggering
+            sleep 2
+        fi
+        
+        # Check for download trigger (server changes)
+        if [ -f "$DOWNLOAD_TRIGGER_FILE" ]; then
+            # Read trigger info if possible
+            if [ -r "$DOWNLOAD_TRIGGER_FILE" ]; then
+                DOWNLOAD_INFO=$(cat "$DOWNLOAD_TRIGGER_FILE" 2>/dev/null || echo "unknown")
+                log_message "Download trigger file detected: $DOWNLOAD_INFO"
+            else
+                log_message "Download trigger file detected"
+            fi
+            
+            # Perform download-only sync
+            do_download_sync "server-changes"
             
             # Small delay to prevent rapid retriggering
             sleep 2
@@ -126,15 +208,15 @@ case "${1:-sync}" in
         ;;
     *)
         echo "Usage: $0 [sync|watch|daemon]"
-        echo "  sync   - Perform one-time sync (default)"
+        echo "  sync   - Perform one-time bi-directional sync (default)"
         echo "  watch  - Watch for plugin triggers"
         echo "  daemon - Run both watcher and periodic sync"
         echo ""
-        echo "Before using this script:"
-        echo "1. Edit the configuration variables at the top of this file"
-        echo "2. Set up SSH key authentication to your remote server"
-        echo "3. Test the connection: ssh \$REMOTE_HOST"
-        echo "4. Make sure the remote directory exists"
+        echo "Configuration:"
+        echo "  Local vault:  $LOCAL_VAULT"
+        echo "  Remote host:  $REMOTE_HOST"
+        echo "  Remote vault: $REMOTE_VAULT"
+        echo "  Log file:     $LOG_FILE"
         exit 1
         ;;
 esac

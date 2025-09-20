@@ -1,0 +1,10 @@
+{
+  "serverUrl": "http://your-server:3000",
+  "syncInterval": 10,
+  "enabled": true,
+  "showNotices": true,
+  "enableServerPolling": true,
+  "serverPollInterval": 30,
+  "lastSyncTimes": {},
+  "serverFileHashes": {}
+}

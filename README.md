@@ -1,6 +1,6 @@
 # 🚀 Obsidian Auto Server Sync
 
-> **Real-time synchronization between Obsidian and a remote web server**
+> **Real-time bidirectional synchronization between Obsidian and a remote web server**
 
 A complete solution for automatically syncing your Obsidian notes to a remote server and accessing them via a beautiful web interface from anywhere in the world.
 
@@ -19,11 +19,13 @@ This project provides a complete synchronization solution consisting of:
 
 ## ✨ Features
 
-### 🎯 **Smart Sync**
+### 🎯 **Smart Bidirectional Sync**
 - **Real-time detection**: Plugin monitors file changes as you edit
-- **Incremental sync**: Only uploads files that have actually changed
-- **Conflict resolution**: Handles simultaneous edits gracefully
+- **Bidirectional sync**: Automatically uploads your changes AND downloads changes from other devices
+- **Smart conflict resolution**: Tracks locally modified files to avoid overwriting your active edits
+- **Server polling**: Checks for changes from other devices every 30 seconds
 - **Background operation**: Never interrupts your workflow
+- **Intelligent triggering**: Uses separate triggers for upload and download operations
 
 ### 🌟 **Web Interface**
 - **Responsive design**: Works perfectly on desktop and mobile
@@ -139,6 +141,30 @@ nano scripts/sync-obsidian.sh
 4. Find **"Auto Server Sync"** and enable it
 5. Configure your server URL in plugin settings
 
+## 🔄 Bidirectional Sync Flow
+
+### **Local Changes → Server**
+1. Edit file in Obsidian
+2. Plugin detects change immediately
+3. Creates `.obsidian-sync-trigger` file
+4. Sync script performs bidirectional sync (upload + download)
+5. Server and web interface update
+
+### **Remote Changes → Local**
+1. Another device makes changes and uploads to server
+2. Plugin polls server API every 30 seconds
+3. Detects new/modified files on server
+4. Creates `.obsidian-download-trigger` file  
+5. Sync script performs download-only sync
+6. Local vault updates automatically
+7. Obsidian refreshes with new content
+
+### **Conflict Prevention**
+- Plugin tracks files you've modified locally
+- During server polling, locally modified files are ignored
+- Grace period of 1 minute after local edits
+- Prevents overwriting your active work
+
 ## 📚 Detailed Documentation
 
 ### 🔌 Plugin Configuration
@@ -146,7 +172,9 @@ nano scripts/sync-obsidian.sh
 The Obsidian plugin provides several configurable options:
 
 - **Server URL**: Your web server address (e.g., `http://your-server:8080`)
-- **Check Interval**: How often to check for changes (default: 10 seconds)
+- **Check Interval**: How often to check for local changes (default: 10 seconds)
+- **Server Poll Interval**: How often to check for server changes (default: 30 seconds)
+- **Enable Server Polling**: Turn bidirectional sync on/off
 - **Notifications**: Enable/disable sync notifications
 - **Auto-start**: Start sync when Obsidian launches
 
@@ -173,15 +201,22 @@ Available options:
 The sync script supports multiple modes:
 
 ```bash
-# One-time sync
+# One-time bidirectional sync
 ./scripts/sync-obsidian.sh sync
 
-# Watch for plugin triggers
+# Watch for plugin triggers (both upload and download)
 ./scripts/sync-obsidian.sh watch
 
 # Daemon mode (watch + periodic sync)
 ./scripts/sync-obsidian.sh daemon
+
+# Quick start (recommended)
+./scripts/start-sync.sh
 ```
+
+### **Trigger Files**
+- `.obsidian-sync-trigger`: Created by plugin for local changes → triggers bidirectional sync
+- `.obsidian-download-trigger`: Created by plugin for server changes → triggers download-only sync
 
 ### 🐳 Docker Deployment
 
