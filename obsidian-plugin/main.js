@@ -171,11 +171,11 @@ class AutoServerSyncPlugin extends Plugin {
         this.updateStatusBar('Syncing...');
         
         try {
-            // Create a marker file to trigger sync
-            const markerPath = '/tmp/obsidian-sync-trigger';
+            // Create a marker file to trigger sync (within vault since we can't write to /tmp)
+            const markerPath = '.obsidian/sync-trigger';
             const markerContent = JSON.stringify({
                 timestamp: Date.now(),
-                vault: this.app.vault.adapter.basePath || '/home/egarrr/Notes/Myself',
+                vault: this.app.vault.adapter.basePath || 'VAULT_PATH_HERE',
                 trigger: 'obsidian-plugin'
             });
             
@@ -187,7 +187,7 @@ class AutoServerSyncPlugin extends Plugin {
                 new Notice('Sync triggered - files will be uploaded to server');
             }
             
-            console.log('Sync triggered via marker file');
+            console.log(`Sync triggered via marker file: ${markerPath}`);
             
             // Reset status after a delay
             setTimeout(() => {
@@ -343,7 +343,7 @@ class AutoServerSyncSettingTab extends PluginSettingTab {
                 <li>• Your sync script (rsync) uploads the changes to the server</li>
                 <li>• Status is shown in the status bar at the bottom</li>
             </ul>
-            <p><strong>Note:</strong> Make sure your sync script (/home/egarrr/sync-obsidian.sh) is working properly.</p>
+            <p><strong>Note:</strong> Make sure your enhanced sync script is running in watch mode.</p>
         `;
     }
 }

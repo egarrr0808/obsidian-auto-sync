@@ -49,7 +49,8 @@ obsidian-auto-sync/
 │   ├── manifest.json             # Plugin metadata
 │   └── styles.css                # Plugin styles
 ├── 📁 scripts/                   # Installation & sync scripts
-│   ├── sync-obsidian.sh          # Main sync script
+│   ├── sync-obsidian.sh          # Basic sync script
+│   ├── sync-obsidian-enhanced.sh # Enhanced sync with plugin support
 │   └── install-plugin.sh         # Plugin installer
 ├── 📁 config-templates/          # Configuration templates
 │   ├── ssh-config-example        # SSH configuration
@@ -120,15 +121,15 @@ nano scripts/install-plugin.sh
 
 #### Configure Sync Script
 ```bash
-# Configure sync script
-nano scripts/sync-obsidian.sh
+# Configure enhanced sync script (recommended for plugin integration)
+nano scripts/sync-obsidian-enhanced.sh
 # Set LOCAL_VAULT, REMOTE_HOST, and REMOTE_VAULT
 
 # Test sync
-./scripts/sync-obsidian.sh sync
+./scripts/sync-obsidian-enhanced.sh sync
 
-# Start daemon (for real-time sync)
-./scripts/sync-obsidian.sh watch &
+# Start watcher (for real-time plugin triggers)
+./scripts/sync-obsidian-enhanced.sh watch &
 ```
 
 ### 4. Enable Plugin in Obsidian
@@ -170,17 +171,17 @@ Available options:
 
 ### 🔄 Sync Modes
 
-The sync script supports multiple modes:
+The enhanced sync script supports multiple modes:
 
 ```bash
 # One-time sync
-./scripts/sync-obsidian.sh sync
+./scripts/sync-obsidian-enhanced.sh sync
 
-# Watch for plugin triggers
-./scripts/sync-obsidian.sh watch
+# Watch for plugin triggers (recommended)
+./scripts/sync-obsidian-enhanced.sh watch
 
 # Daemon mode (watch + periodic sync)
-./scripts/sync-obsidian.sh daemon
+./scripts/sync-obsidian-enhanced.sh daemon
 ```
 
 ### 🐳 Docker Deployment
@@ -196,6 +197,34 @@ docker run -d \
   -v /path/to/vault:/app/vault:ro \
   obsidian-server
 ```
+
+## 🛠️ Troubleshooting
+
+### Common Issues
+
+#### Plugin Sync Button "No such file" Error
+If you get a "no such file" error when clicking the sync button, this is likely because:
+
+1. **Obsidian's security model**: The plugin cannot write to system paths like `/tmp/`
+2. **Solution**: The plugin now creates the trigger file within the vault at `.obsidian/sync-trigger`
+3. **Required**: Use the enhanced sync script which watches for the trigger file in the correct location
+
+#### Sync Script Not Detecting Changes
+Ensure you're running the enhanced sync script in watch mode:
+```bash
+# Stop any old sync processes
+pkill -f "sync-obsidian"
+
+# Start enhanced watcher
+./scripts/sync-obsidian-enhanced.sh watch &
+```
+
+#### Plugin Not Triggering Sync
+Check the Obsidian developer console (Ctrl+Shift+I) for error messages. Common fixes:
+
+1. Ensure the enhanced sync script is running in watch mode
+2. Check file permissions on the vault directory
+3. Verify the trigger file location matches between plugin and script
 
 ## 🔧 Advanced Configuration
 
