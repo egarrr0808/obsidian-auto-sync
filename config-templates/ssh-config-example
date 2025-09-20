@@ -1,0 +1,24 @@
+# SSH Configuration Example for Obsidian Sync
+# Copy this to ~/.ssh/config and customize for your server
+
+# Example server configuration
+Host obsidian-server
+    HostName your-server-ip-or-domain
+    User your-username
+    Port 22
+    IdentityFile ~/.ssh/your-private-key
+    StrictHostKeyChecking no
+    ServerAliveInterval 60
+    ServerAliveCountMax 10
+
+# Replace the following:
+# - obsidian-server: Your chosen alias for the server
+# - your-server-ip-or-domain: Your server's IP address or domain name
+# - your-username: Your username on the remote server (e.g., ubuntu, root, etc.)
+# - your-private-key: Path to your SSH private key file
+
+# Example:
+# Host myserver
+#     HostName 192.168.1.100
+#     User ubuntu
+#     IdentityFile ~/.ssh/id_rsa

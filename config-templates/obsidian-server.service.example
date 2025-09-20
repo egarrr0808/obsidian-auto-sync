@@ -1,0 +1,33 @@
+# Systemd Service Example for Obsidian Web Server
+# Copy this to /etc/systemd/system/obsidian-server.service and customize
+
+[Unit]
+Description=Obsidian Web Server
+After=network.target
+
+[Service]
+Type=simple
+User=your-username
+WorkingDirectory=/path/to/obsidian-web-server
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+Environment=PORT=8080
+Environment=VAULT_PATH=/path/to/your/vault
+
+# Optional: Set resource limits
+# LimitNOFILE=65536
+# MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target
+
+# Instructions:
+# 1. Replace 'your-username' with your actual username
+# 2. Replace '/path/to/obsidian-web-server' with the actual path to your server directory
+# 3. Replace '/path/to/your/vault' with the actual path to your vault directory
+# 4. Copy this file to /etc/systemd/system/obsidian-server.service
+# 5. Run: sudo systemctl daemon-reload
+# 6. Run: sudo systemctl enable obsidian-server
+# 7. Run: sudo systemctl start obsidian-server

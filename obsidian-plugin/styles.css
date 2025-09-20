@@ -1,0 +1,32 @@
+/* Auto Server Sync Plugin Styles */
+
+.auto-sync-status-bar {
+    display: flex;
+    align-items: center;
+    font-size: 12px;
+}
+
+.auto-sync-running {
+    color: var(--text-success);
+}
+
+.auto-sync-error {
+    color: var(--text-error);
+}
+
+.auto-sync-syncing {
+    color: var(--text-accent);
+}
+
+.auto-sync-stopped {
+    color: var(--text-muted);
+}
+
+.setting-item-description ul {
+    margin-left: 20px;
+    margin-top: 10px;
+}
+
+.setting-item-description li {
+    margin-bottom: 5px;
+}

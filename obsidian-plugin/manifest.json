@@ -1,0 +1,11 @@
+{
+	"id": "auto-server-sync",
+	"name": "Auto Server Sync",
+	"version": "1.0.0",
+	"minAppVersion": "0.15.0",
+	"description": "Automatically syncs modified files to a remote server every 10 seconds",
+	"author": "Obsidian Auto Sync",
+	"authorUrl": "",
+	"fundingUrl": "",
+	"isDesktopOnly": false
+}
