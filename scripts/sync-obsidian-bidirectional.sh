@@ -106,25 +106,83 @@ detect_remote_changes() {
         local relative_path="${remote_file#$REMOTE_VAULT}"
         local local_file="$LOCAL_VAULT$relative_path"
         
-        # Skip if file was recently uploaded by this machine
-        if was_recently_uploaded "$relative_path"; then
-            echo "$(date '+%Y-%m-%d %H:%M:%S') - Skipping $relative_path (recently uploaded by this machine)" >&2
-            continue
-        fi
-        
         # Get modification times
         local remote_mtime=$(get_remote_file_mtime "$remote_file")
         local local_mtime=$(get_file_mtime "$local_file")
         
-        # Check if remote file is newer
+        # Server is source of truth - download if remote is newer OR if recently uploaded but changed again
         if [ "$remote_mtime" -gt "$local_mtime" ]; then
-            echo "$(date '+%Y-%m-%d %H:%M:%S') - Remote change detected: $relative_path (remote: $remote_mtime, local: $local_mtime)" >&2
-            echo "$relative_path" >> "$temp_file"
+            # Check if this was recently uploaded but has changed again on server
+            local upload_conflict="false"
+            if was_recently_uploaded "$relative_path"; then
+                # Get the upload time to see if server version is even newer
+                local last_upload_time=$(grep "^$MACHINE_ID:$relative_path:" "$UPLOAD_TRACKER" 2>/dev/null | tail -1 | cut -d: -f3)
+                if [ -n "$last_upload_time" ] && [ "$remote_mtime" -gt "$last_upload_time" ]; then
+                    upload_conflict="true"
+                    echo "$(date '+%Y-%m-%d %H:%M:%S') - Server version is newer than our upload: $relative_path (remote: $remote_mtime, upload: $last_upload_time)" >&2
+                fi
+            fi
+            
+            if [ "$upload_conflict" = "true" ] || ! was_recently_uploaded "$relative_path"; then
+                echo "$(date '+%Y-%m-%d %H:%M:%S') - Remote change detected: $relative_path (remote: $remote_mtime, local: $local_mtime)" >&2
+                echo "$relative_path" >> "$temp_file"
+            else
+                echo "$(date '+%Y-%m-%d %H:%M:%S') - Skipping $relative_path (recently uploaded by this machine and unchanged on server)" >&2
+            fi
         fi
         
     done <<< "$remote_files"
     
     # Output changed files to stdout only
+    if [ -f "$temp_file" ]; then
+        cat "$temp_file"
+        rm -f "$temp_file"
+    fi
+}
+
+# Function to detect remote changes with server priority (ignores upload tracking)
+detect_remote_changes_server_priority() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - Checking for server changes (server priority mode)..." >&2
+    
+    local temp_file="/tmp/changed_files_$$"
+    local remote_files_list="/tmp/remote_files_$$"
+    rm -f "$temp_file" "$remote_files_list"
+    
+    # Get list of all markdown files on remote and save to temp file
+    ssh "$REMOTE_HOST" "find '$REMOTE_VAULT' -name '*.md' -type f 2>/dev/null" > "$remote_files_list"
+    
+    if [ ! -s "$remote_files_list" ]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - No markdown files found on remote server" >&2
+        rm -f "$remote_files_list"
+        return 0
+    fi
+    
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - Found $(wc -l < "$remote_files_list") files on server" >&2
+    
+    # Process each remote file using exec to avoid subshell issues
+    exec 3< "$remote_files_list"
+    while IFS= read -r remote_file <&3; do
+        [ -z "$remote_file" ] && continue
+        
+        # Convert remote path to local path
+        local relative_path="${remote_file#$REMOTE_VAULT}"
+        local local_file="$LOCAL_VAULT$relative_path"
+        
+        # Get modification times
+        local remote_mtime=$(get_remote_file_mtime "$remote_file")
+        local local_mtime=$(get_file_mtime "$local_file")
+        
+        # Server is source of truth - download if remote is newer (ignore upload tracking)
+        if [ "$remote_mtime" -gt "$local_mtime" ]; then
+            echo "$(date '+%Y-%m-%d %H:%M:%S') - Server priority: $relative_path (remote: $remote_mtime, local: $local_mtime)" >&2
+            echo "$relative_path" >> "$temp_file"
+        fi
+    done
+    exec 3<&-
+    
+    # Clean up and output changed files
+    rm -f "$remote_files_list"
+    
     if [ -f "$temp_file" ]; then
         cat "$temp_file"
         rm -f "$temp_file"
@@ -230,7 +288,7 @@ do_bidirectional_sync() {
         return 1
     fi
     
-    # First, detect and download remote changes
+    # First, detect and download remote changes (server priority)
     local remote_changes_temp="/tmp/remote_changes_$$"
     detect_remote_changes > "$remote_changes_temp"
     
@@ -241,6 +299,7 @@ do_bidirectional_sync() {
         done < "$remote_changes_temp"
         
         if [ ${#remote_changes[@]} -gt 0 ]; then
+            log_message "Downloading ${#remote_changes[@]} newer files from server (server priority)..."
             download_remote_changes "${remote_changes[@]}"
         fi
     fi
@@ -369,13 +428,38 @@ case "${1:-sync}" in
         
         rm -f "$remote_changes_temp"
         ;;
+    "server-priority")
+        # Server is always source of truth - download any newer server files
+        log_message "Server priority sync - downloading all newer server files..."
+        remote_changes_temp="/tmp/remote_changes_$$"
+        
+        # Temporarily disable upload tracking for this check
+        IGNORE_UPLOAD_TRACKING="true"
+        detect_remote_changes_server_priority > "$remote_changes_temp"
+        
+        if [ -s "$remote_changes_temp" ]; then
+            remote_changes=()
+            while IFS= read -r changed_file; do
+                remote_changes+=("$changed_file")
+            done < "$remote_changes_temp"
+            
+            if [ ${#remote_changes[@]} -gt 0 ]; then
+                download_remote_changes "${remote_changes[@]}"
+            fi
+        else
+            log_message "No newer files found on server"
+        fi
+        
+        rm -f "$remote_changes_temp"
+        ;;
     *)
-        echo "Usage: $0 [sync|watch|daemon|download-only|download-only-quiet]"
-        echo "  sync               - Perform one-time bidirectional sync (default)"
-        echo "  watch              - Watch for plugin triggers and sync bidirectionally"
-        echo "  daemon             - Run both watcher and periodic bidirectional sync"
-        echo "  download-only      - Only check for and download remote changes"
-        echo "  download-only-quiet - Quiet download check (for frequent periodic use)"
+        echo "Usage: $0 [sync|watch|daemon|download-only|download-only-quiet|server-priority]"
+        echo "  sync                 - Perform one-time bidirectional sync (default)"
+        echo "  watch                - Watch for plugin triggers and sync bidirectionally"
+        echo "  daemon               - Run both watcher and periodic bidirectional sync"
+        echo "  download-only        - Only check for and download remote changes"
+        echo "  download-only-quiet  - Quiet download check (for frequent periodic use)"
+        echo "  server-priority      - Download all newer server files (server is source of truth)"
         exit 1
         ;;
 esac

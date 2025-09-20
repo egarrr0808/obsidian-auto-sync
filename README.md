@@ -316,6 +316,25 @@ For optimal multi-device sync, run the second laptop in "second laptop mode" whi
 - **5-Minute Window**: Prevents immediate download of just-uploaded files
 - **Timestamp Comparison**: Only newer remote files are downloaded
 - **Quiet Mode**: Frequent checks don't spam the log
+- **Server Priority Mode**: Server always wins - downloads ANY newer server files
+
+### Server as Source of Truth
+
+Use `server-priority` mode when you want the server to be the definitive source:
+
+```bash
+# Download ALL files that are newer on server
+./scripts/sync-obsidian-bidirectional.sh server-priority
+
+# Or via master script
+./scripts/sync-obsidian-master.sh server-priority
+```
+
+**When to use:**
+- After editing files on another device
+- When you want to ensure local matches server exactly
+- To resolve conflicts by accepting server version
+- When setting up a new device
 
 ### Multi-Device Commands
 
@@ -325,6 +344,9 @@ For optimal multi-device sync, run the second laptop in "second laptop mode" whi
 
 # Full bidirectional sync
 ./scripts/sync-obsidian-bidirectional.sh sync
+
+# Server as source of truth - download ALL newer server files
+./scripts/sync-obsidian-bidirectional.sh server-priority
 
 # Start optimized second laptop mode
 ./scripts/start-second-laptop.sh

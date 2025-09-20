@@ -133,13 +133,18 @@ case "${1:-watch}" in
         # One-time download check
         "$BIDIRECTIONAL_SCRIPT" download-only
         ;;
+    "server-priority")
+        # Server is source of truth - download all newer server files
+        "$BIDIRECTIONAL_SCRIPT" server-priority
+        ;;
     *)
-        echo "Usage: $0 [watch|daemon|second-laptop|sync|download-only]"
-        echo "  watch        - Watch for plugin triggers (default)"
-        echo "  daemon       - Run both watcher and periodic bidirectional sync"
+        echo "Usage: $0 [watch|daemon|second-laptop|sync|download-only|server-priority]"
+        echo "  watch         - Watch for plugin triggers (default)"
+        echo "  daemon        - Run both watcher and periodic bidirectional sync"
         echo "  second-laptop - Optimized for second laptop (frequent download checks)"
-        echo "  sync         - Perform one-time bidirectional sync"
+        echo "  sync          - Perform one-time bidirectional sync"
         echo "  download-only - Check for remote changes only"
+        echo "  server-priority - Download all newer server files (server is source of truth)"
         exit 1
         ;;
 esac
