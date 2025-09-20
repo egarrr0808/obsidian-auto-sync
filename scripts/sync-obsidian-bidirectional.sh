@@ -42,7 +42,7 @@ get_remote_file_mtime() {
 was_recently_uploaded() {
     local file_path="$1"
     local current_time=$(date +%s)
-    local upload_window=300  # 5 minutes
+    local upload_window=60   # 1 minute
     
     if [ -f "$UPLOAD_TRACKER" ]; then
         # Check if file was uploaded recently by this machine
@@ -119,15 +119,21 @@ detect_remote_changes() {
                 local last_upload_time=$(grep "^$MACHINE_ID:$relative_path:" "$UPLOAD_TRACKER" 2>/dev/null | tail -1 | cut -d: -f3)
                 if [ -n "$last_upload_time" ] && [ "$remote_mtime" -gt "$last_upload_time" ]; then
                     upload_conflict="true"
-                    echo "$(date '+%Y-%m-%d %H:%M:%S') - Server version is newer than our upload: $relative_path (remote: $remote_mtime, upload: $last_upload_time)" >&2
+                    if [ "$QUIET_MODE" != "true" ]; then
+                        echo "$(date '+%Y-%m-%d %H:%M:%S') - Server version is newer than our upload: $relative_path (remote: $remote_mtime, upload: $last_upload_time)" >&2
+                    fi
                 fi
             fi
             
             if [ "$upload_conflict" = "true" ] || ! was_recently_uploaded "$relative_path"; then
-                echo "$(date '+%Y-%m-%d %H:%M:%S') - Remote change detected: $relative_path (remote: $remote_mtime, local: $local_mtime)" >&2
+                if [ "$QUIET_MODE" != "true" ]; then
+                    echo "$(date '+%Y-%m-%d %H:%M:%S') - Remote change detected: $relative_path (remote: $remote_mtime, local: $local_mtime)" >&2
+                fi
                 echo "$relative_path" >> "$temp_file"
             else
-                echo "$(date '+%Y-%m-%d %H:%M:%S') - Skipping $relative_path (recently uploaded by this machine and unchanged on server)" >&2
+                if [ "$QUIET_MODE" != "true" ]; then
+                    echo "$(date '+%Y-%m-%d %H:%M:%S') - Skipping $relative_path (recently uploaded by this machine and unchanged on server)" >&2
+                fi
             fi
         fi
         
@@ -398,6 +404,9 @@ case "${1:-sync}" in
             done < "$remote_changes_temp"
             
             if [ ${#remote_changes[@]} -gt 0 ]; then
+                if [ "$QUIET_MODE" = "true" ]; then
+                    log_message "Found ${#remote_changes[@]} remote changes, downloading..."
+                fi
                 download_remote_changes "${remote_changes[@]}"
             fi
         else

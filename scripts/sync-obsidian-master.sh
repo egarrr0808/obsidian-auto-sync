@@ -89,7 +89,7 @@ periodic_download_checker() {
     log_message "Starting periodic download checker (checking every 30 seconds)..."
     
     while true; do
-        sleep 30  # Check every 30 seconds for remote changes
+        sleep 15  # Check every 15 seconds for remote changes
         
         # Only check for downloads, don't upload (quiet mode)
         "$BIDIRECTIONAL_SCRIPT" download-only-quiet
