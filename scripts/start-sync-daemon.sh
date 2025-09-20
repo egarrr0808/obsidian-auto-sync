@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Second Laptop Startup Script
-# This script starts the optimized mode for the second laptop
-# It will frequently check for remote changes from the primary laptop
+# Multi-Device Sync Daemon Startup Script
+# This script starts full bidirectional sync mode for any laptop
+# Perfect for active editing with instant uploads and automatic downloads
 
 SCRIPT_DIR="$(dirname "$0")"
 MASTER_SCRIPT="$SCRIPT_DIR/sync-obsidian-master.sh"

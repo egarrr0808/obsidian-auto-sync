@@ -281,33 +281,37 @@ sudo ufw allow 443
 sudo ufw allow ssh
 ```
 
-## 🖥️ Multiple Laptop Setup
+## 🖥️ Universal Multi-Device Setup
 
-### Second Laptop Mode
+### Same Setup for All Laptops
 
-For optimal multi-device sync, run the second laptop in "second laptop mode" which aggressively checks for remote changes:
+Both laptops should use the exact same configuration for optimal bidirectional sync:
 
 ```bash
-# Easy startup for second laptop
+# Universal startup (same for all laptops)
+./scripts/start-sync.sh
+
+# Or if you prefer the old name:
 ./scripts/start-second-laptop.sh
 
 # Or manually:
-./scripts/sync-obsidian-master.sh second-laptop
+./scripts/sync-obsidian-master.sh daemon
 ```
 
 ### How Multi-Device Sync Works
 
-**Laptop A (Primary):**
-1. Makes changes in Obsidian
-2. Plugin triggers upload immediately
-3. Changes appear on server
+**Both Laptops (Identical Setup):**
+1. Edit files in Obsidian → Plugin triggers instant upload
+2. Auto-download changes from other laptops every 30 seconds
+3. Periodic full sync every 15 minutes (safety net)
+4. Show notifications when remote changes detected
+5. Perfect for active editing on any device
 
-**Laptop B (Second):**
-1. Runs in "second laptop mode"
-2. Checks for remote changes every 15 seconds
-3. Automatically downloads changes from Laptop A
-4. Shows notification in Obsidian
-5. Files update seamlessly
+**No Primary/Secondary Distinction:**
+- Both laptops work exactly the same way
+- Both can edit and upload instantly
+- Both automatically download changes from the other
+- True peer-to-peer bidirectional sync
 
 ### Smart Conflict Prevention
 
@@ -336,20 +340,20 @@ Use `server-priority` mode when you want the server to be the definitive source:
 - To resolve conflicts by accepting server version
 - When setting up a new device
 
-### Multi-Device Commands
+### Universal Commands (Same for All Laptops)
 
 ```bash
-# Check for remote changes (quiet)
-./scripts/sync-obsidian-bidirectional.sh download-only-quiet
+# Start universal sync (same for all laptops)
+./scripts/start-sync.sh
 
-# Full bidirectional sync
-./scripts/sync-obsidian-bidirectional.sh sync
+# Manual sync commands:
+./scripts/sync-obsidian-bidirectional.sh sync              # Full bidirectional sync
+./scripts/sync-obsidian-bidirectional.sh server-priority    # Server wins conflicts  
+./scripts/sync-obsidian-bidirectional.sh download-only      # Check for remote changes
 
-# Server as source of truth - download ALL newer server files
-./scripts/sync-obsidian-bidirectional.sh server-priority
-
-# Start optimized second laptop mode
-./scripts/start-second-laptop.sh
+# Master script modes:
+./scripts/sync-obsidian-master.sh daemon                    # Full bidirectional (recommended)
+./scripts/sync-obsidian-master.sh watch                     # Plugin triggers only
 ```
 
 ## 🐛 Troubleshooting

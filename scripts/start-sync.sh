@@ -1,29 +1,41 @@
 #!/bin/bash
 
-echo "🚀 Starting Obsidian Auto-Sync System..."
+# Universal Obsidian Sync Startup Script
+# This script starts the same optimal sync mode for ANY laptop
+# Both laptops get identical functionality: instant uploads + auto downloads
 
-# Kill any existing sync daemons
-pkill -f sync_obsidian_plugin.sh 2>/dev/null
+SCRIPT_DIR="$(dirname "$0")"
+MASTER_SCRIPT="$SCRIPT_DIR/sync-obsidian-master.sh"
 
-# Start the sync daemon
-nohup /home/egarrr/sync_obsidian_plugin.sh watch > /dev/null 2>&1 &
-DAEMON_PID=$!
+echo "🚀 Starting Universal Multi-Device Sync"
+echo "======================================="
+echo ""
+echo "✨ This provides identical functionality for ALL laptops:"
+echo "• ⚡ Instant uploads when you edit files"
+echo "• 🔄 Auto-download changes from other laptops (every 30s)"
+echo "• 🔒 Periodic full sync every 15 minutes (safety net)"
+echo "• 🎯 Perfect for active editing on any device"
+echo ""
+echo "📱 Works the same on Laptop 1, Laptop 2, or any device!"
+echo ""
+echo "Press Ctrl+C to stop"
+echo ""
 
-echo "✅ Sync daemon started (PID: $DAEMON_PID)"
-echo "📂 Local vault: /home/egarrr/Md essays/"
-echo "🌐 Server URL: http://207.127.93.169:3000"
+# Check if master script exists
+if [ ! -f "$MASTER_SCRIPT" ]; then
+    echo "❌ Error: Master sync script not found at $MASTER_SCRIPT"
+    exit 1
+fi
+
+# Stop any existing sync processes
+echo "🔄 Stopping any existing sync processes..."
+pkill -f "sync-obsidian-master" 2>/dev/null || echo "No existing processes to stop"
+
+sleep 2
+
+# Start daemon mode (same for all laptops)
+echo "🚀 Starting daemon mode (universal for all laptops)..."
 echo "📝 Log file: /home/egarrr/obsidian-sync.log"
+echo ""
 
-echo ""
-echo "🔄 SYNC CAPABILITIES:"
-echo "  • Upload: Local changes → Server (every 10s)"
-echo "  • Download: Server changes → Local (via plugin polling every 30s)"
-echo "  • Conflict resolution: Local changes ignored during server downloads"
-echo ""
-echo "📋 COMMANDS:"
-echo "  • Manual sync: ./sync_obsidian_plugin.sh sync"
-echo "  • View logs: tail -f /home/egarrr/obsidian-sync.log"
-echo "  • Stop daemon: pkill -f sync_obsidian_plugin.sh"
-
-echo ""
-echo "🎯 Ready for use! Open Obsidian and enable the 'Auto Server Sync' plugin."
+"$MASTER_SCRIPT" daemon
