@@ -4,12 +4,12 @@
 # This script syncs files both ways: local->remote and remote->local
 # It includes smart conflict resolution to avoid download loops
 
-LOCAL_VAULT="$HOME/Notes/"
-REMOTE_HOST="YOUR_SSH_ALIAS_HERE"
-REMOTE_VAULT="/path/to/remote/obsidian-vault/"
-LOG_FILE="$HOME/obsidian-sync.log"
-TRIGGER_FILE="$LOCAL_VAULT/.obsidian/sync-trigger"
-STATE_DIR="$HOME/.obsidian-sync"
+LOCAL_VAULT="/home/egarrr/Notes/"
+REMOTE_HOST="ChainServer#1"
+REMOTE_VAULT="/home/ubuntu/obsidian-vault/"
+LOG_FILE="/home/egarrr/obsidian-sync.log"
+TRIGGER_FILE="/home/egarrr/Notes/Myself/.obsidian/sync-trigger"
+STATE_DIR="/home/egarrr/.obsidian-sync"
 UPLOAD_TRACKER="$STATE_DIR/last-uploads"
 DOWNLOAD_TRACKER="$STATE_DIR/last-downloads"
 MACHINE_ID=$(uname -n)-$(whoami)
@@ -79,7 +79,10 @@ record_download() {
 
 # Function to detect remote changes
 detect_remote_changes() {
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - Checking for remote changes..." >&2
+    # Only log if not in quiet mode
+    if [ "$QUIET_MODE" != "true" ]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - Checking for remote changes..." >&2
+    fi
     
     local temp_file="/tmp/changed_files_$$"
     rm -f "$temp_file"  # Clean up any previous temp file
@@ -89,7 +92,9 @@ detect_remote_changes() {
     remote_files=$(ssh "$REMOTE_HOST" "find '$REMOTE_VAULT' -name '*.md' -type f 2>/dev/null")
     
     if [ -z "$remote_files" ]; then
-        echo "$(date '+%Y-%m-%d %H:%M:%S') - No markdown files found on remote server" >&2
+        if [ "$QUIET_MODE" != "true" ]; then
+            echo "$(date '+%Y-%m-%d %H:%M:%S') - No markdown files found on remote server" >&2
+        fi
         return 0
     fi
     
@@ -321,7 +326,9 @@ case "${1:-sync}" in
         ;;
     "download-only")
         # Only check for and download remote changes
-        log_message "Checking for remote changes only..."
+        if [ "$QUIET_MODE" != "true" ]; then
+            log_message "Checking for remote changes only..."
+        fi
         remote_changes_temp="/tmp/remote_changes_$$"
         detect_remote_changes > "$remote_changes_temp"
         
@@ -335,17 +342,40 @@ case "${1:-sync}" in
                 download_remote_changes "${remote_changes[@]}"
             fi
         else
-            log_message "No remote changes detected"
+            if [ "$QUIET_MODE" != "true" ]; then
+                log_message "No remote changes detected"
+            fi
+        fi
+        
+        rm -f "$remote_changes_temp"
+        ;;
+    "download-only-quiet")
+        # Quiet download-only mode (for frequent periodic checks)
+        QUIET_MODE="true"
+        remote_changes_temp="/tmp/remote_changes_$$"
+        detect_remote_changes > "$remote_changes_temp"
+        
+        if [ -s "$remote_changes_temp" ]; then
+            remote_changes=()
+            while IFS= read -r changed_file; do
+                remote_changes+=("$changed_file")
+            done < "$remote_changes_temp"
+            
+            if [ ${#remote_changes[@]} -gt 0 ]; then
+                log_message "Found ${#remote_changes[@]} remote changes, downloading..."
+                download_remote_changes "${remote_changes[@]}"
+            fi
         fi
         
         rm -f "$remote_changes_temp"
         ;;
     *)
-        echo "Usage: $0 [sync|watch|daemon|download-only]"
-        echo "  sync         - Perform one-time bidirectional sync (default)"
-        echo "  watch        - Watch for plugin triggers and sync bidirectionally"
-        echo "  daemon       - Run both watcher and periodic bidirectional sync"
-        echo "  download-only - Only check for and download remote changes"
+        echo "Usage: $0 [sync|watch|daemon|download-only|download-only-quiet]"
+        echo "  sync               - Perform one-time bidirectional sync (default)"
+        echo "  watch              - Watch for plugin triggers and sync bidirectionally"
+        echo "  daemon             - Run both watcher and periodic bidirectional sync"
+        echo "  download-only      - Only check for and download remote changes"
+        echo "  download-only-quiet - Quiet download check (for frequent periodic use)"
         exit 1
         ;;
 esac

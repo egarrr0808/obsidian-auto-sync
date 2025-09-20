@@ -281,6 +281,55 @@ sudo ufw allow 443
 sudo ufw allow ssh
 ```
 
+## 🖥️ Multiple Laptop Setup
+
+### Second Laptop Mode
+
+For optimal multi-device sync, run the second laptop in "second laptop mode" which aggressively checks for remote changes:
+
+```bash
+# Easy startup for second laptop
+./scripts/start-second-laptop.sh
+
+# Or manually:
+./scripts/sync-obsidian-master.sh second-laptop
+```
+
+### How Multi-Device Sync Works
+
+**Laptop A (Primary):**
+1. Makes changes in Obsidian
+2. Plugin triggers upload immediately
+3. Changes appear on server
+
+**Laptop B (Second):**
+1. Runs in "second laptop mode"
+2. Checks for remote changes every 15 seconds
+3. Automatically downloads changes from Laptop A
+4. Shows notification in Obsidian
+5. Files update seamlessly
+
+### Smart Conflict Prevention
+
+- **Device Tracking**: Each laptop has unique identifier
+- **Upload Protection**: Recent uploads are not re-downloaded 
+- **5-Minute Window**: Prevents immediate download of just-uploaded files
+- **Timestamp Comparison**: Only newer remote files are downloaded
+- **Quiet Mode**: Frequent checks don't spam the log
+
+### Multi-Device Commands
+
+```bash
+# Check for remote changes (quiet)
+./scripts/sync-obsidian-bidirectional.sh download-only-quiet
+
+# Full bidirectional sync
+./scripts/sync-obsidian-bidirectional.sh sync
+
+# Start optimized second laptop mode
+./scripts/start-second-laptop.sh
+```
+
 ## 🐛 Troubleshooting
 
 ### Common Issues

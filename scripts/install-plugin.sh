@@ -7,7 +7,7 @@
 # CONFIGURATION - EDIT THESE VALUES
 # ===========================================
 
-OBSIDIAN_VAULT_PATH="$HOME/path/to/your/obsidian/vault"
+OBSIDIAN_VAULT_PATH="/home/egarrr/Notes/Myself"
 PLUGIN_SOURCE_DIR="$(dirname "$0")/../obsidian-plugin"
 
 # ===========================================

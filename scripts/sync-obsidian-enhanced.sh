@@ -4,11 +4,11 @@
 # This script syncs your local Notes directory to the remote Obsidian server
 # It can be triggered by the Obsidian plugin or run standalone
 
-LOCAL_VAULT="$HOME/Notes/"
-REMOTE_HOST="YOUR_SSH_ALIAS_HERE"
-REMOTE_VAULT="/path/to/remote/obsidian-vault/"
-LOG_FILE="$HOME/obsidian-sync.log"
-TRIGGER_FILE="$LOCAL_VAULT/.obsidian/sync-trigger"
+LOCAL_VAULT="/home/egarrr/Notes/"
+REMOTE_HOST="ChainServer#1"
+REMOTE_VAULT="/home/ubuntu/obsidian-vault/"
+LOG_FILE="/home/egarrr/obsidian-sync.log"
+TRIGGER_FILE="/home/egarrr/Notes/Myself/.obsidian/sync-trigger"
 
 # Function to log messages with timestamp
 log_message() {
