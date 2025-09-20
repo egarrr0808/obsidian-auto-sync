@@ -49,9 +49,18 @@ class AutoServerSyncPlugin extends Plugin {
         // Add command to sync now
         this.addCommand({
             id: 'sync-now',
-            name: 'Sync Now',
+            name: 'Sync Now (Bidirectional)',
             callback: () => {
                 this.triggerSync();
+            }
+        });
+        
+        // Add command to download only
+        this.addCommand({
+            id: 'download-remote-changes',
+            name: 'Download Remote Changes',
+            callback: () => {
+                this.triggerDownloadOnly();
             }
         });
         
@@ -59,6 +68,9 @@ class AutoServerSyncPlugin extends Plugin {
         if (this.settings.enabled) {
             this.startSync();
         }
+        
+        // Start monitoring for remote changes
+        this.startRemoteChangeMonitoring();
         
         // Register file modification listener
         this.registerEvent(
@@ -90,6 +102,7 @@ class AutoServerSyncPlugin extends Plugin {
     onunload() {
         console.log('Auto Server Sync plugin unloading...');
         this.stopSync();
+        this.stopRemoteChangeMonitoring();
     }
 
     startSync() {
@@ -211,6 +224,108 @@ class AutoServerSyncPlugin extends Plugin {
             this.statusBarItemEl.setText(`🔄 ${status}`);
         }
     }
+    
+    async triggerDownloadOnly() {
+        if (this.pendingSync) {
+            return;
+        }
+        
+        this.pendingSync = true;
+        this.updateStatusBar('Checking Remote...');
+        
+        try {
+            // Create a marker file to trigger download-only sync
+            const markerPath = '.obsidian/download-trigger';
+            const markerContent = JSON.stringify({
+                timestamp: Date.now(),
+                vault: this.app.vault.adapter.basePath || 'VAULT_PATH_HERE',
+                trigger: 'download-only'
+            });
+            
+            await this.app.vault.adapter.write(markerPath, markerContent);
+            
+            if (this.settings.showNotices) {
+                new Notice('Checking for remote changes...');
+            }
+            
+            console.log(`Download-only triggered via marker file: ${markerPath}`);
+            
+            // Reset status after a delay
+            setTimeout(() => {
+                this.updateStatusBar('Running');
+                this.pendingSync = false;
+            }, 5000);
+            
+        } catch (error) {
+            console.error('Error triggering download check:', error);
+            this.updateStatusBar('Error');
+            this.pendingSync = false;
+            
+            if (this.settings.showNotices) {
+                new Notice(`Download check failed: ${error.message}`);
+            }
+        }
+    }
+    
+    startRemoteChangeMonitoring() {
+        // Monitor for remote change marker files
+        this.remoteChangeTimer = setInterval(() => {
+            this.checkForRemoteChangeMarkers();
+        }, 3000); // Check every 3 seconds
+        
+        console.log('Remote change monitoring started');
+    }
+    
+    stopRemoteChangeMonitoring() {
+        if (this.remoteChangeTimer) {
+            clearInterval(this.remoteChangeTimer);
+            this.remoteChangeTimer = null;
+        }
+        console.log('Remote change monitoring stopped');
+    }
+    
+    async checkForRemoteChangeMarkers() {
+        try {
+            // Look for remote change marker files
+            const files = await this.app.vault.adapter.list('.obsidian/');
+            
+            if (files.files) {
+                for (const file of files.files) {
+                    if (file.startsWith('.obsidian/remote-change-') && file.endsWith('.json')) {
+                        await this.handleRemoteChangeMarker(file);
+                    }
+                }
+            }
+        } catch (error) {
+            // Silently ignore errors to avoid spam
+        }
+    }
+    
+    async handleRemoteChangeMarker(markerFile) {
+        try {
+            // Read the marker file
+            const content = await this.app.vault.adapter.read(markerFile);
+            const changeInfo = JSON.parse(content);
+            
+            if (this.settings.showNotices) {
+                new Notice(`Remote change detected: ${changeInfo.file}`);
+            }
+            
+            console.log('Remote change marker detected:', changeInfo);
+            
+            // Update status briefly
+            this.updateStatusBar('Remote Change');
+            setTimeout(() => {
+                this.updateStatusBar('Running');
+            }, 3000);
+            
+            // Remove the marker file
+            await this.app.vault.adapter.remove(markerFile);
+            
+        } catch (error) {
+            console.error('Error handling remote change marker:', error);
+        }
+    }
 
     async loadSettings() {
         this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
@@ -260,7 +375,7 @@ class AutoServerSyncSettingTab extends PluginSettingTab {
             .setName('Server URL')
             .setDesc('URL of your Obsidian web server (for reference)')
             .addText(text => text
-                .setPlaceholder('http://localhost:8080')
+                .setPlaceholder('http://207.127.93.169:8080')
                 .setValue(this.plugin.settings.serverUrl)
                 .onChange(async (value) => {
                     this.plugin.settings.serverUrl = value;
@@ -308,13 +423,22 @@ class AutoServerSyncSettingTab extends PluginSettingTab {
         statusEl.style.marginBottom = '15px';
         
         new Setting(containerEl)
-            .setName('Trigger sync now')
-            .setDesc('Manually trigger the sync script to upload all changes immediately')
+            .setName('Trigger bidirectional sync')
+            .setDesc('Upload local changes and download remote changes immediately')
             .addButton(button => button
-                .setButtonText('Sync Now')
+                .setButtonText('Sync Now (Bidirectional)')
                 .setClass('mod-cta')
                 .onClick(() => {
                     this.plugin.triggerSync();
+                }));
+                
+        new Setting(containerEl)
+            .setName('Download remote changes only')
+            .setDesc('Check for and download changes from other devices without uploading local changes')
+            .addButton(button => button
+                .setButtonText('Download Remote Changes')
+                .onClick(() => {
+                    this.plugin.triggerDownloadOnly();
                 }));
 
         // Clear sync history
@@ -335,15 +459,20 @@ class AutoServerSyncSettingTab extends PluginSettingTab {
         containerEl.createEl('h3', { text: 'How it works' });
         const instructionsEl = containerEl.createEl('div', { cls: 'setting-item-description' });
         instructionsEl.innerHTML = `
-            <p>This plugin works in conjunction with your existing sync script:</p>
+            <p>This plugin enables <strong>bidirectional synchronization</strong> with your remote server:</p>
             <ul>
-                <li>• Monitors file changes in real-time</li>
-                <li>• Every 10 seconds, checks if any files were modified</li>
-                <li>• When changes are detected, triggers your external sync script</li>
-                <li>• Your sync script (rsync) uploads the changes to the server</li>
-                <li>• Status is shown in the status bar at the bottom</li>
+                <li>• <strong>Upload:</strong> Monitors local file changes and uploads them to the server</li>
+                <li>• <strong>Download:</strong> Detects remote changes and downloads them automatically</li>
+                <li>• <strong>Smart Conflict Resolution:</strong> Avoids downloading files you just uploaded</li>
+                <li>• <strong>Real-time Notifications:</strong> Shows when files are synced or downloaded</li>
+                <li>• <strong>Multiple Device Support:</strong> Works seamlessly across laptops/devices</li>
             </ul>
-            <p><strong>Note:</strong> Make sure your enhanced sync script is running in watch mode.</p>
+            <p><strong>Requirements:</strong></p>
+            <ul>
+                <li>• Enhanced sync script running in watch mode</li>
+                <li>• Proper SSH key authentication to remote server</li>
+                <li>• Network connectivity to your remote server</li>
+            </ul>
         `;
     }
 }

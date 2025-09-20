@@ -19,10 +19,12 @@ This project provides a complete synchronization solution consisting of:
 
 ## ✨ Features
 
-### 🎯 **Smart Sync**
+### 🔄 **Bidirectional Smart Sync**
 - **Real-time detection**: Plugin monitors file changes as you edit
-- **Incremental sync**: Only uploads files that have actually changed
-- **Conflict resolution**: Handles simultaneous edits gracefully
+- **Upload & Download**: Automatically syncs changes both ways (laptop ↔ server)
+- **Smart conflict resolution**: Avoids downloading files you just uploaded
+- **Multi-device support**: Works seamlessly across multiple laptops/devices
+- **Change origin tracking**: Knows which device made each change
 - **Background operation**: Never interrupts your workflow
 
 ### 🌟 **Web Interface**
@@ -51,6 +53,8 @@ obsidian-auto-sync/
 ├── 📁 scripts/                   # Installation & sync scripts
 │   ├── sync-obsidian.sh          # Basic sync script
 │   ├── sync-obsidian-enhanced.sh # Enhanced sync with plugin support
+│   ├── sync-obsidian-bidirectional.sh # Full bidirectional sync
+│   ├── sync-obsidian-master.sh   # Master sync orchestrator
 │   └── install-plugin.sh         # Plugin installer
 ├── 📁 config-templates/          # Configuration templates
 │   ├── ssh-config-example        # SSH configuration
@@ -119,17 +123,21 @@ nano scripts/install-plugin.sh
 ./scripts/install-plugin.sh
 ```
 
-#### Configure Sync Script
+#### Configure Bidirectional Sync
 ```bash
-# Configure enhanced sync script (recommended for plugin integration)
-nano scripts/sync-obsidian-enhanced.sh
+# Configure bidirectional sync script (recommended)
+nano scripts/sync-obsidian-bidirectional.sh
 # Set LOCAL_VAULT, REMOTE_HOST, and REMOTE_VAULT
 
-# Test sync
-./scripts/sync-obsidian-enhanced.sh sync
+# Configure master sync orchestrator
+nano scripts/sync-obsidian-master.sh
+# Update script paths if needed
 
-# Start watcher (for real-time plugin triggers)
-./scripts/sync-obsidian-enhanced.sh watch &
+# Test bidirectional sync
+./scripts/sync-obsidian-bidirectional.sh sync
+
+# Start master watcher (for real-time bidirectional sync)
+./scripts/sync-obsidian-master.sh watch &
 ```
 
 ### 4. Enable Plugin in Obsidian
@@ -171,17 +179,18 @@ Available options:
 
 ### 🔄 Sync Modes
 
-The enhanced sync script supports multiple modes:
+The bidirectional sync script supports multiple modes:
 
 ```bash
-# One-time sync
-./scripts/sync-obsidian-enhanced.sh sync
+# One-time bidirectional sync
+./scripts/sync-obsidian-bidirectional.sh sync
 
-# Watch for plugin triggers (recommended)
-./scripts/sync-obsidian-enhanced.sh watch
+# Download remote changes only
+./scripts/sync-obsidian-bidirectional.sh download-only
 
-# Daemon mode (watch + periodic sync)
-./scripts/sync-obsidian-enhanced.sh daemon
+# Master orchestrator (recommended)
+./scripts/sync-obsidian-master.sh watch    # Watch for triggers
+./scripts/sync-obsidian-master.sh daemon   # Watch + periodic sync
 ```
 
 ### 🐳 Docker Deployment
@@ -197,6 +206,47 @@ docker run -d \
   -v /path/to/vault:/app/vault:ro \
   obsidian-server
 ```
+
+## 🔄 Bidirectional Sync Features
+
+### How It Works
+
+The bidirectional sync system provides seamless synchronization across multiple devices:
+
+1. **Upload Detection**: Monitors local file changes and uploads them to the server
+2. **Download Detection**: Checks remote server for files changed by other devices
+3. **Smart Conflict Resolution**: Tracks which device made each change to avoid conflicts
+4. **Change Origin Tracking**: Each device has a unique identifier to prevent download loops
+5. **Real-time Notifications**: Plugin shows when remote changes are detected and downloaded
+
+### Multi-Device Workflow
+
+```mermaid
+graph LR
+    A[Laptop A] <-->|rsync| B[Remote Server]
+    C[Laptop B] <-->|rsync| B
+    D[Laptop C] <-->|rsync| B
+    
+    A -.->|detects changes| A
+    B -.->|notifies| C
+    B -.->|notifies| D
+```
+
+### Key Benefits
+
+- ✅ **No File Conflicts**: Smart tracking prevents overwriting your own changes
+- ✅ **Instant Updates**: See changes from other devices within seconds
+- ✅ **Bandwidth Efficient**: Only transfers changed files
+- ✅ **Offline Capable**: Works when devices are temporarily disconnected
+- ✅ **Version Safe**: Uses file modification timestamps for accurate detection
+
+### Change Detection Logic
+
+1. **Local Changes**: Plugin detects file modifications in real-time
+2. **Remote Changes**: Script compares remote vs local modification timestamps
+3. **Upload Protection**: Files recently uploaded by current device are skipped from download
+4. **New Files**: Handles both new file creation and existing file modifications
+5. **Deletions**: Synchronizes file deletions across all devices
 
 ## 🛠️ Troubleshooting
 
